@@ -1,0 +1,15 @@
+apiVersion: generators.hoegaarden.github.com/v1alpha1
+kind: VcapServices
+metadata:
+  name: vcap-services
+  labels:
+    allLabels: get.passed.through
+  annotations:
+    andAllAnnotations: also get passed through
+    soDoes: this one
+cf:
+  space: some-space
+  org: some-org
+  services:
+  - rabbitmq
+  - config-server

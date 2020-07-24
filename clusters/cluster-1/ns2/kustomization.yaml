@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ns2
+resources:
+- namespace.yaml
+
+bases:
+- ../../../shared/groups
+
+patchesStrategicMerge:
+- |-
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: RoleBinding
+  metadata:
+    name: exec-group
+  subjects:
+  - kind: Group
+    name: oidc:SomeOtherGroup
+- |-
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: RoleBinding
+  metadata:
+    name: read-only-group
+  subjects:
+  - kind: Group
+    name: oidc:SomeGroup
