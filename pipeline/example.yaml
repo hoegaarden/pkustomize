@@ -1,0 +1,144 @@
+resources:
+- name: repo
+  type: git
+  source:
+    uri: https://github.com/hoegaarden/pkustomize
+    branch: main
+
+jobs:
+- name: deploy clusters
+  plan:
+  - get: repo
+  - task: get pks
+    params:
+      PIVNET_TOKEN: ((pivnet-token))
+    config:
+      platform: linux
+      image_resource:
+        type: registry-image
+        source: { repository: hhoerl/ops }
+      outputs:
+      - name: pks-cli
+      caches:
+      - path: downloads
+      run:
+        path: bash
+        args:
+        - -c
+        - |
+          set -euo pipefail
+
+          # hack-9000
+          sudo chown -R "$UID" downloads pks-cli
+
+          if [ -e downloads/pks ]
+          then
+            echo >&2 'Using pks form cache'
+          else
+            pivnet login --api-token "$PIVNET_TOKEN"
+            pivnet download-product-files --product-slug='pivotal-container-service' --release-version='1.8.1' --product-file-id=737302
+            cp pks-linux-* downloads/pks
+          fi
+
+          cp downloads/pks pks-cli
+          chmod 0750 pks-cli/pks
+  - task: ensure clusters
+    params:
+      PKS_API: ((pks-api))
+      PKS_USER: ((pks-user))
+      PKS_PASS: ((pks-pass))
+    config:
+      platform: linux
+      image_resource:
+        type: registry-image
+        source: { repository: hhoerl/ops }
+      inputs:
+      - name: repo
+      - name: pks-cli
+      caches:
+      - path: go
+      run:
+        path: bash
+        args:
+        - -ic
+        - |
+          set -euo pipefail
+
+          export PATH="$(pwd)/pks-cli:${PATH}"
+          export GOPATH="$(pwd)/go"
+          export XDG_CONFIG_HOME="$(pwd)/repo"
+
+          # hack-9000
+          sudo chown -R "$UID" go
+          go get -v 'gopkg.in/yaml.v2'
+
+          run() {
+            echo >&2 "## running: ${*}" ; "${@}"
+          }
+          getConf() {
+            yq -e -r --arg key "$2" --arg default "$3" '.[$key] // $default' "$1" 2>/dev/null \
+              || echo "$3"
+          }
+          ensureCluster() {
+            local cluster="$1"
+            local clusterDir="$2"
+
+            local clusterConf="${clusterDir}/pks.yaml"
+
+            local nrOfNodes="$( getConf "$clusterConf" nrOfNodes 1 )"
+
+            local c
+            if c="$(pks cluster "$cluster" --json)" >/dev/null 2>&1
+            then
+              if [ "$nrOfNodes" != "$(jq -r .parameters.kubernetes_worker_instances <<< "$c")" ]
+              then
+                run pks resize "$cluster" --non-interactive --num-nodes "$nrOfNodes" --wait
+              else
+                echo >&2 "No need to scale, cluster already has ${nrOfNodes} workers"
+              fi
+            else
+              local extHostname="$( getConf "$clusterConf" externalHostname "${cluster}.local" )"
+              local plan="$( getConf "$clusterConf" plan 'small' )"
+              run pks create-cluster "$cluster" \
+                --non-interactive \
+                --num-nodes "$nrOfNodes" \
+                --external-hostname "$extHostname" \
+                --plan "$plan" \
+                --wait
+            fi
+
+            local details="$(run pks cluster "$cluster" --json --details)"
+            echo "$details" | jq -C .
+
+            # hack-9000
+            jq -r '"\(.kubernetes_master_ips[0]) \(.parameters.kubernetes_master_host)"' <<< "$details" \
+              | sudo tee -a /etc/hosts \
+              > /dev/null
+
+            pks get-credentials "$cluster"
+            kubectl config set-context "$cluster"
+
+            echo >&2
+            echo >&2 "## generating & applying kustomizatons from '${clusterDir}'"
+            kustomize build --enable_alpha_plugins "${clusterDir}" \
+              | kubectl apply -f -
+          }
+
+          main() {
+            pks login --api "$PKS_API" --username "$PKS_USER" --password "$PKS_PASS" --skip-ssl-validation
+
+            local cluster
+            while read -d $'\0' -r cluster
+            do
+              echo >&2 '##------------------------------------------------------------'
+
+              ensureCluster "$cluster" "repo/clusters/${cluster}" \
+                > >( sed "s/^/${cluster},O: /g" ) \
+                2> >( sed "s/^/${cluster},E: /g" >&2 )
+
+              echo >&2 '##------------------------------------------------------------'
+              echo >&2
+            done < <(find repo/clusters -maxdepth 1 -mindepth 1 -type d -printf '%P\0')
+          }
+
+          main "$@"
