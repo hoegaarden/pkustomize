@@ -47,6 +47,8 @@ jobs:
       PKS_API: ((pks-api))
       PKS_USER: ((pks-user))
       PKS_PASS: ((pks-pass))
+      CLUSTER_DIR: repo/clusters
+      PLUGIN_DIR: repo/plugins
     config:
       platform: linux
       image_resource:
@@ -66,7 +68,7 @@ jobs:
 
           export PATH="$(pwd)/pks-cli:${PATH}"
           export GOPATH="$(pwd)/go"
-          export XDG_CONFIG_HOME="$(pwd)/repo"
+          export KUSTOMIZE_PLUGIN_HOME="$(pwd)/${PLUGIN_DIR}"
 
           # hack-9000
           sudo chown -R "$UID" go
@@ -132,13 +134,13 @@ jobs:
             do
               echo >&2 '##------------------------------------------------------------'
 
-              ensureCluster "$cluster" "repo/clusters/${cluster}" \
+              ensureCluster "$cluster" "${CLUSTER_DIR}/${cluster}" \
                 > >( sed "s/^/${cluster},O: /g" ) \
                 2> >( sed "s/^/${cluster},E: /g" >&2 )
 
               echo >&2 '##------------------------------------------------------------'
               echo >&2
-            done < <(find repo/clusters -maxdepth 1 -mindepth 1 -type d -printf '%P\0')
+            done < <(find "${CLUSTER_DIR}" -maxdepth 1 -mindepth 1 -type d -printf '%P\0')
           }
 
           main "$@"

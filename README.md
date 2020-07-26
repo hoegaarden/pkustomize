@@ -31,15 +31,14 @@ The [example pipeline][pipe] has expects a certain directory structure:
 │   └── <span style="font-weight:bold;color:blue;">cluster-2</span>
 │       ├── kustomization.yaml
 │       └── pks.yaml
-├── <span style="font-weight:bold;color:blue;">kustomize</span>
-│   └── <span style="font-weight:bold;color:blue;">plugin</span>
-│       └── <span style="font-weight:bold;color:blue;">generators.hoegaarden.github.com</span>
-│           └── <span style="font-weight:bold;color:blue;">v1alpha1</span>
-│               └── <span style="font-weight:bold;color:blue;">vcapservices</span>
-│                   ├── main.go
-│                   └── <span style="font-weight:bold;color:green;">VcapServices</span>
 ├── <span style="font-weight:bold;color:blue;">pipeline</span>
 │   └── example.yaml
+├── <span style="font-weight:bold;color:blue;">plugins</span>
+│   └── <span style="font-weight:bold;color:blue;">generators.hoegaarden.github.com</span>
+│       └── <span style="font-weight:bold;color:blue;">v1alpha1</span>
+│           └── <span style="font-weight:bold;color:blue;">vcapservices</span>
+│               ├── main.go
+│               └── <span style="font-weight:bold;color:green;">VcapServices</span>
 ├── README.md
 └── <span style="font-weight:bold;color:blue;">shared</span>
     ├── <span style="font-weight:bold;color:blue;">ci-deployer</span>
@@ -57,7 +56,7 @@ The [example pipeline][pipe] has expects a certain directory structure:
         ├── prom-deploy.yaml
         └── prom-rbac.yaml
 
-16 directories, 25 files
+15 directories, 25 files
 </pre>
 
 
@@ -95,8 +94,8 @@ touched, i.e. they won't be deleted.
 #### `kustomize.yaml`
 
 The main [kustomize] configuration for the whole cluster. Everything that needs
-to be created in or deployed to the cluster needs needs to be created/managed
-with [kustomize].
+to be created in or deployed to the cluster needs to be created/managed with
+[kustomize].
 
 In the example the clusters have some cluster specific configuration in
 `./clusters/${clusterName}/...` and use some shared configuration (shared
@@ -107,9 +106,9 @@ In the example the clusters have some cluster specific configuration in
 Things that are shared across multiple clusters in that environment can be
 pulled in as a base from `./shared/...`.
 
-### plugins in `./kustomize/plugin/...`
+### kustomize plugins in `./plugins/...`
 
-`XDG_CONFIG_HOME` will be set to `./kustomize`. This allows us to place plugins in
+`KUSTOMIZE_PLUGIN_HOME` will be set to `./plugins`. This allows us to place plugins in
 there to be picked up by kustomize.
 
 There is one example plugin `generators.hoegaarden.github.com/v1alpha1/VcapServices`:
@@ -117,7 +116,7 @@ There is one example plugin `generators.hoegaarden.github.com/v1alpha1/VcapServi
 It mimics a usecase I saw at a customer, where they had to pull in some data
 from a Cloud Foundry Foundation and make that available to the cluster in a
 kubernetes secret. This example plugin shows how this could be done. The
-example plugin does not really talk to any external system, but it should be
+example does not really talk to any external system, but it should be
 easy enough to imagine how this could be implemented.
 
 The example plugin is implemented as a [exec plugin][ep] which just happens to
